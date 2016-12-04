@@ -225,7 +225,12 @@ def buildEdgeProbTable(eqCollection):
                             current_count = read_count
                             if (contig1, contig2) in binom_classes:
                                 current_count = binom_classes[(contig1, contig2)] + read_count
-                            binom_classes[(contig1, contig2)] = current_count
+                                binom_classes[(contig1, contig2)] = current_count
+                            elif (contig2, contig1) in binom_classes:
+                                current_count = binom_classes[(contig1, contig2)] + read_count
+                                binom_classes[(contig2, contig1)] = current_count
+                            else:
+                                 binom_classes[(contig1, contig2)] = current_count
                                 
             count +=1
     return binom_classes
@@ -255,84 +260,66 @@ def filterGraph(expDict, netfile, ofile):
     #    # To avoid divide by 0 error
     #    for name in sailfish[cond]:
     #        sailfish[cond][name] += 1
-    testfile = None
-    quantfile = None
     eqClasses = {}
-    masterDf = None
-    for cond in conditions:
-        print("Expression Dict",expDict[cond])
-        for sampNum, sampPath in expDict[cond].iteritems():
-            print("Samp Num {0}, Samp Path {1}".format(sampNum, sampPath))
-            if cond not in eqClasses:
-                eqClasses[cond] = EquivCollection()
-            eqPath = os.path.sep.join([sampPath, "aux", "eq_classes.txt"])
-            print("Eq Path: ", eqPath)
-            readEqClass(eqPath, eqClasses[cond])
-            print("\nPRINTING EQ CLASSES ", len(eqClasses[cond].eqClasses))
-            quantfile = os.path.sep.join([sampPath, "quant.sf"])
-            testfile = os.path.sep.join([sampPath, "testfile.sf"])
-            qfile = open(testfile,'w')
-            qfile.write("Name(Quant.sf)\tReads(Quant.sf)\tName(Eq Classes)\tReads(Eq Classes)")
-            myEqCollection = EquivCollection()
-            readEqClass(eqPath, myEqCollection)
-            counts_dict = buildEdgeProbTable(myEqCollection)
-            local_ambig = getCountsFromEquiv(myEqCollection)
-            df = pd.DataFrame(columns=['Condition','Folder','t1','t2','count','total', 'prob','pre'])
-            df['t1'] = [myEqCollection.tnames[item[0]] for item in counts_dict.keys()]
-            df['t2'] = [myEqCollection.tnames[item[1]] for item in counts_dict.keys()]
-            df['count'] = counts_dict.values()
-            df['Condition'] = cond
-            df['Folder'] = sampPath
-            df = df.apply(calculate_prob,  axis=1,args=([local_ambig, myEqCollection]))
-            masterDf = pd.concat([masterDf, df])
-             
+    masterDf = pd.read_csv('/home/ec2-user/proj1/sailfish_quant/masterdf.csv')
+    if masterDf is None:
+        for cond in conditions:
+            print("Expression Dict",expDict[cond])
+            for sampNum, sampPath in expDict[cond].iteritems():
+                print("Samp Num {0}, Samp Path {1}".format(sampNum, sampPath))
+                if cond not in eqClasses:
+                    eqClasses[cond] = EquivCollection()
+                eqPath = os.path.sep.join([sampPath, "aux", "eq_classes.txt"])
+                print("Eq Path: ", eqPath)
+                readEqClass(eqPath, eqClasses[cond])
+                print("\nPRINTING EQ CLASSES ", len(eqClasses[cond].eqClasses))
+                myEqCollection = EquivCollection()
+                readEqClass(eqPath, myEqCollection)
+                counts_dict = buildEdgeProbTable(myEqCollection)
+                local_ambig = getCountsFromEquiv(myEqCollection)
+                df = pd.DataFrame(columns=['Condition','Folder','t1','t2','count','total', 'prob','pre'])
+                df['t1'] = [myEqCollection.tnames[item[0]] for item in counts_dict.keys()]
+                df['t2'] = [myEqCollection.tnames[item[1]] for item in counts_dict.keys()]
+                df['count'] = counts_dict.values()
+                df['Condition'] = cond
+                df['Folder'] = sampPath
+                df = df.apply(calculate_prob,  axis=1,args=([local_ambig, myEqCollection]))
+                masterDf = pd.concat([masterDf, df])
+        ambigCounts = {cond : getCountsFromEquiv(eqClasses[cond]) for cond in conditions}
+
+        sailfish = {}
+        for cond in conditions:
+            sailfish[cond] = ambigCounts[cond]         
+        masterDf.to_csv('masterdf.csv')
     print("Master DF Length", len(masterDf))
-    quant = pd.read_table(quantfile)
-    masterDf.to_csv('masterdf.csv')
-    ambigCounts = {cond : getCountsFromEquiv(eqClasses[cond]) for cond in conditions}
-
-    sailfish = {}
-    for cond in conditions:
-        sailfish[cond] = ambigCounts[cond]
-
     print ("Done Reading")
     count = 0
     numTrimmed = 0
     print("NETFILE ", netfile)
     print("OFILE ", ofile)
+    big_file = open('biggest_file.csv', 'a')
+    big_df = pd.DataFrame()
     with open(netfile) as f, open(ofile, 'w') as ofile:
-        data = pd.read_table(f, header=None)
+        net  = pd.read_table(f, header=None)
+        data = net[net[0]!=net[1]]
         for i in range(len(data)):
             count += 1
             print("\r{} done".format(count), end="")
             #Alternative hypo
-            x = data[0][i]
-            y = data[1][i]
-            tempDf1 = masterDf['t1'].str.match(x)
-            tempDf2 =  masterDf['t2'].str.match(y)
-            currentDf = masterDf[tempDf1 & tempDf2]
+            x = masterDf.loc[i,'t1']
+            y = masterDf.loc[i,'t2']
+            currentDf = masterDf[(masterDf['t1'] == x).astype(bool)  &  (masterDf['t2']== y).astype(bool)]
             currentDf['key'] = 0
             matched = 0
             mergeDf = None
             for cond in conditions:
-                if mergeDf == None:
-                    mergedDf = currentDf[currentDf['Condition'].str.match(cond)]
+                if mergeDf is None:
+                    mergeDf = currentDf[currentDf['Condition']==cond]
                 else:
-                    pd.merge(mergeDf,currentDf[currentDf['Condition'].str.match(cond)], on='key')
-            with open('biggest_file.csv', 'a') as f:
-                if mergeDf!=None:
-                    mergeDf.to_csv(f, header=False)
-            #mergeDf[mergeDf['pre_x']-mergeDf['pre_y']].to_csv()
-            #null hypothesis
-            null = 0
-            for cond in conditions:
-                pass
-            D = 21
-            if D <= 20:
-                ofile.write("{}\t{}\t{}\n".format(x, y, data[2][i]))
-            else:
-                numTrimmed += 1
+                    pd.merge(mergeDf,currentDf[currentDf['Condition']==cond], on='key')
+            if mergeDf is not None:
+                big_df = pd.concat([big_df, mergeDf])
+
+    big_df.to_csv(big_file, header=False)
     print("\nTrimmed {} edges".format(numTrimmed))
-
-
 
