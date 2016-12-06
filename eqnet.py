@@ -261,7 +261,11 @@ def filterGraph(expDict, netfile, ofile):
     #    for name in sailfish[cond]:
     #        sailfish[cond][name] += 1
     eqClasses = {}
-    masterDf = pd.read_csv('/home/ec2-user/proj1/sailfish_quant/masterdf.csv')
+    masterDf = None
+    try:
+        masterDf = pd.read_csv('/home/ec2-user/proj1/sailfish_quant/masterdf.csv')
+    except:
+        pass
     if masterDf is None:
         for cond in conditions:
             print("Expression Dict",expDict[cond])
@@ -302,13 +306,15 @@ def filterGraph(expDict, netfile, ofile):
     with open(netfile) as f, open(ofile, 'w') as ofile:
         net  = pd.read_table(f, header=None)
         data = net[net[0]!=net[1]]
+        data = data.reset_index()
         for i in range(len(data)):
             count += 1
             print("\r{} done".format(count), end="")
             #Alternative hypo
-            x = data[0][i]
-            y = data[1][i] 
-            currentDf = masterDf[(masterDf['t1'] == x).astype(bool)  &  (masterDf['t2']== y).astype(bool)]
+            x = data[1][i]
+            y = data[2][i] 
+            currentDf = masterDf[masterDf['t1'] == x]
+            currentDf = currentDf[currentDf['t2']== y]
             currentDf['key'] = 0
             matched = 0
             mergeDf = None
