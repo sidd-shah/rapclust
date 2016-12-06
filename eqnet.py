@@ -306,8 +306,8 @@ def filterGraph(expDict, netfile, ofile):
             count += 1
             print("\r{} done".format(count), end="")
             #Alternative hypo
-            x = masterDf.loc[i,'t1']
-            y = masterDf.loc[i,'t2']
+            x = data[0][i]
+            y = data[1][i] 
             currentDf = masterDf[(masterDf['t1'] == x).astype(bool)  &  (masterDf['t2']== y).astype(bool)]
             currentDf['key'] = 0
             matched = 0
