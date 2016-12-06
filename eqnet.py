@@ -218,7 +218,7 @@ def buildEdgeProbTable(eqCollection):
         else:
             tup = row[0]
             read_count = row[1]
-            if(len(tup)>2):
+            if(len(tup)>=2):
                 for i1,contig1 in enumerate(tup):
                     for i2,contig2 in enumerate(tup):
                         if(contig1!=contig2) and i2>i1:
@@ -227,7 +227,7 @@ def buildEdgeProbTable(eqCollection):
                                 current_count = binom_classes[(contig1, contig2)] + read_count
                                 binom_classes[(contig1, contig2)] = current_count
                             elif (contig2, contig1) in binom_classes:
-                                current_count = binom_classes[(contig1, contig2)] + read_count
+                                current_count = binom_classes[(contig2, contig1)] + read_count
                                 binom_classes[(contig2, contig1)] = current_count
                             else:
                                  binom_classes[(contig1, contig2)] = current_count
@@ -316,7 +316,7 @@ def filterGraph(expDict, netfile, ofile):
                 if mergeDf is None:
                     mergeDf = currentDf[currentDf['Condition']==cond]
                 else:
-                    pd.merge(mergeDf,currentDf[currentDf['Condition']==cond], on='key')
+                    mergeDf = pd.merge(mergeDf,currentDf[currentDf['Condition']==cond], on='key')
             if mergeDf is not None:
                 big_df = pd.concat([big_df, mergeDf])
 
