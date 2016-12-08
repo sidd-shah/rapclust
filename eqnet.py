@@ -198,17 +198,34 @@ def flattenClusters(infile, outfile):
                 cname = "cluster{}".format(i)
                 for t in toks:
                     ofile.write("{}\t{}\n".format(cname, t))
-
+'''
+This function calculates the probability between the reads of pair of transcripts
+of the total reads for individual transcripts
+'''
 def calculate_prob(edge, ambigCounts, eqCollection):
     num = edge['count']
     count1 = ambigCounts[edge['t1']]
     count2 = ambigCounts[edge['t2']]
+    # subtracting num because of double counting
     denom = count1 + count2 - num
     edge['prob'] = float(num)/float(denom)
     edge['total'] = denom
+    # Calculate the negative binomial for a pair of transcript
     edge['pre'] = 2* edge['prob']*edge['prob'] * (1- edge['prob'])
     return edge
 
+'''
+This function takes the eqcollection and iterates over every row of the eqclasses
+and iterates over every transcript in each eqclass and stores the pair of every two transcripts as key and the total count of that pair across all eqclasses as it value in the bimon classes dict
+Example:
+eqclasses
+t1 t2 10
+t2 t1 90
+binom_classes
+{
+(t1,t2):100
+}
+'''
 def buildEdgeProbTable(eqCollection):
     binom_classes = {}
     count = 1
@@ -235,6 +252,25 @@ def buildEdgeProbTable(eqCollection):
             count +=1
     return binom_classes
 
+'''
+This function generates a dictionary from a data frame
+The format of the dictionary would be
+{
+    (t1,t2):{
+        'Control':{
+            'A1':{
+                'prob':0.1,
+                'pre':0.5,
+                'count':10,
+                'total':20
+            },
+        }
+        'HOXA Knockdown':{
+        
+        }
+    }
+}
+'''
 def generate_dict(master):
     mast_dict = {}
     for i,row in master.iterrows():
@@ -357,31 +393,30 @@ def filterGraph(expDict, netfile, ofile):
                 continue 
 #            start = time.time()
             value = mast_dict[(x,y)]
-        
+            # We are generating a datafram for the given pair from mast_dict
+            # This df will have max 6 rows 3 for each condition        
             currentDf = pd.DataFrame.from_records([(x,y,cond,folder, value[cond][folder]['count'],
                                                 value[cond][folder]['total'],value[cond][folder]['prob'],
                                                 value[cond][folder]['pre']) for cond in value for folder in value[cond]])
             currentDf['key'] = 0
             matched = 0
             mergeDf = None
+            # This loop generates a cross matrix dataframe from the above currentDf across 2 conditions. Thus resulting in a max of 9 rows for a given pair of transcripts
             for cond in conditions:
                 if mergeDf is None:
                     mergeDf = currentDf[currentDf[2]==cond]
                 else:
                     mergeDf = pd.merge(mergeDf,currentDf[currentDf[2]==cond], on='key')
             if  mergeDf is not None and len(mergeDf)>0:
+                # We are calculating the absolute difference between the probabilites across 2 conditions
                 mergeDf['diff_prob'] = abs(mergeDf['6_x']-mergeDf['6_y'])
-                mergeDf['threshold'] = mergeDf[['6_x','6_y']].max(axis=1)*0.8
+                # We are considering the threshold to be the a percentage of the max of the probability across the 2 conditions
+                mergeDf['threshold'] = mergeDf[['6_x','6_y']].max(axis=1)*0.3
+                # We are counting the number of instances where our diff falss within the range of threshold
                 count1 = len(mergeDf[mergeDf['threshold']-mergeDf['diff_prob']>=0])
-                if count1/7>=0.5: 
+                # If the number of instances with diff greater than threshold is greater than 50% than add the edge to filt.net
+                if count1/len(mergeDf)>=0.5: 
                     ofile.write("{}\t{}\t{}\n".format(x, y, data[2][i]))
-#                    big_list.append(mergeDf.values.tolist())
-#                if len(big_list) > 1000:
-#                    print("Writing to file")
-#                    write_to_file(big_list, big_file)                    
-#wr.writerows(big_list)
-                    big_list = []
-     #               big_df = pd.concat([big_df, mergeDf])
         end = time.time()
         print("Total", end-start)
     
