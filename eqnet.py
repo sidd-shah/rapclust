@@ -342,16 +342,19 @@ def filterGraph(expDict, netfile, ofile):
     big_list = []
     wr =csv.writer(big_file)
     with open(netfile) as f, open(ofile, 'w') as ofile:
-        net  = pd.read_table(f, header=None)
-        data = net[net[0]!=net[1]]
-        data = data.reset_index()
+        data  = pd.read_table(f, header=None)
+#        data = net[net[0]!=net[1]]
+#        data = data.reset_index()
         start = time.time()
         for i in range(len(data)):
             count += 1
             print("\r{} done".format(count), end="")
             #Alternative hypo
             x = data[0][i]
-            y = data[1][i] 
+            y = data[1][i]
+            if x==y:
+                ofile.write("{}\t{}\t{}\n".format(x, y, data[2][i]))
+                continue 
 #            start = time.time()
             value = mast_dict[(x,y)]
         
@@ -368,7 +371,7 @@ def filterGraph(expDict, netfile, ofile):
                     mergeDf = pd.merge(mergeDf,currentDf[currentDf[2]==cond], on='key')
             if  mergeDf is not None and len(mergeDf)>0:
                 mergeDf['diff_prob'] = abs(mergeDf['6_x']-mergeDf['6_y'])
-                mergeDf['threshold'] = mergeDf[['6_x','6_y']].max(axis=1)*0.6
+                mergeDf['threshold'] = mergeDf[['6_x','6_y']].max(axis=1)*0.8
                 count1 = len(mergeDf[mergeDf['threshold']-mergeDf['diff_prob']>=0])
                 if count1/7>=0.5: 
                     ofile.write("{}\t{}\t{}\n".format(x, y, data[2][i]))
