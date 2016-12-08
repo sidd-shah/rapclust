@@ -1,5 +1,5 @@
 from __future__ import print_function
-
+import time
 def buildNetFile(sampdirs, netfile, cutoff, writecomponents=False):
     import itertools
     import pandas as pd
@@ -235,6 +235,40 @@ def buildEdgeProbTable(eqCollection):
             count +=1
     return binom_classes
 
+def generate_dict(master):
+    mast_dict = {}
+    for i,row in master.iterrows():
+
+        row_dict ={}
+        key = (row['t1'], row['t2'])
+        if key in mast_dict:
+            row_dict = mast_dict[key]        
+            row_row_dict = {}
+            if row['Condition'] in row_dict:
+                row_row_dict = row_dict[row['Condition']]
+            row_row_dict[row['Folder']] = {
+                'count' : row['count'],
+                'total': row['total'],
+                'prob':row['prob'],
+                'pre':row['pre']
+            }
+            row_dict[row['Condition']] = row_row_dict
+        else:
+            row_dict[row['Condition']] = {}
+            row_dict[row['Condition']][row['Folder']] = {}
+            folder = row_dict[row['Condition']][row['Folder']]
+            folder['count'] = row['count']
+            folder['total']= row['total']
+            folder['prob']=row['prob']
+            folder['pre'] =row['pre']
+            mast_dict[key] = row_dict
+    return mast_dict
+
+def write_to_file(list, file):
+    for line1 in list:
+        for line2 in line1:
+            file.write(','.join(map(str, line2)))
+            file.write("\n")
 
 def filterGraph(expDict, netfile, ofile):
     import os
@@ -295,37 +329,61 @@ def filterGraph(expDict, netfile, ofile):
         for cond in conditions:
             sailfish[cond] = ambigCounts[cond]         
         masterDf.to_csv('masterdf.csv')
+    mast_dict = generate_dict(masterDf)
     print("Master DF Length", len(masterDf))
     print ("Done Reading")
     count = 0
     numTrimmed = 0
     print("NETFILE ", netfile)
     print("OFILE ", ofile)
-    big_file = open('biggest_file.csv', 'a')
+    import csv   
+    big_file = open('biggest_file.csv', 'wb')
     big_df = pd.DataFrame()
+    big_list = []
+    wr =csv.writer(big_file)
     with open(netfile) as f, open(ofile, 'w') as ofile:
         net  = pd.read_table(f, header=None)
         data = net[net[0]!=net[1]]
         data = data.reset_index()
+        start = time.time()
         for i in range(len(data)):
             count += 1
             print("\r{} done".format(count), end="")
             #Alternative hypo
-            x = data[1][i]
-            y = data[2][i] 
-            currentDf = masterDf[masterDf['t1'] == x]
-            currentDf = currentDf[currentDf['t2']== y]
+            x = data[0][i]
+            y = data[1][i] 
+#            start = time.time()
+            value = mast_dict[(x,y)]
+        
+            currentDf = pd.DataFrame.from_records([(x,y,cond,folder, value[cond][folder]['count'],
+                                                value[cond][folder]['total'],value[cond][folder]['prob'],
+                                                value[cond][folder]['pre']) for cond in value for folder in value[cond]])
             currentDf['key'] = 0
             matched = 0
             mergeDf = None
             for cond in conditions:
                 if mergeDf is None:
-                    mergeDf = currentDf[currentDf['Condition']==cond]
+                    mergeDf = currentDf[currentDf[2]==cond]
                 else:
-                    mergeDf = pd.merge(mergeDf,currentDf[currentDf['Condition']==cond], on='key')
-            if mergeDf is not None:
-                big_df = pd.concat([big_df, mergeDf])
-
-    big_df.to_csv(big_file, header=False)
+                    mergeDf = pd.merge(mergeDf,currentDf[currentDf[2]==cond], on='key')
+            if  mergeDf is not None and len(mergeDf)>0:
+                mergeDf['diff_prob'] = abs(mergeDf['6_x']-mergeDf['6_y'])
+                mergeDf['threshold'] = mergeDf[['6_x','6_y']].max(axis=1)*0.6
+                count1 = len(mergeDf[mergeDf['threshold']-mergeDf['diff_prob']>=0])
+                if count1/7>=0.5: 
+                    ofile.write("{}\t{}\t{}\n".format(x, y, data[2][i]))
+#                    big_list.append(mergeDf.values.tolist())
+#                if len(big_list) > 1000:
+#                    print("Writing to file")
+#                    write_to_file(big_list, big_file)                    
+#wr.writerows(big_list)
+                    big_list = []
+     #               big_df = pd.concat([big_df, mergeDf])
+        end = time.time()
+        print("Total", end-start)
+    
+#    write_to_file(big_list, big_file)
+    big_file.close()
+#    big_df.to_csv(big_file, header=False)
     print("\nTrimmed {} edges".format(numTrimmed))
 
