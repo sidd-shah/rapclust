@@ -1,9 +1,10 @@
 from __future__ import print_function
 import time
+import json
+import numpy as np
 def buildNetFile(sampdirs, netfile, cutoff, writecomponents=False):
     import itertools
     import pandas as pd
-    import numpy as np
     import os
 
     sep = os.path.sep
@@ -211,7 +212,7 @@ def calculate_prob(edge, ambigCounts, eqCollection):
     edge['prob'] = float(num)/float(denom)
     edge['total'] = denom
     # Calculate the negative binomial for a pair of transcript
-    edge['pre'] = 2* edge['prob']*edge['prob'] * (1- edge['prob'])
+    edge['pre'] = np.log(2* edge['prob']*edge['prob'] * (1- edge['prob']))
     return edge
 
 '''
@@ -365,7 +366,9 @@ def filterGraph(expDict, netfile, ofile):
         for cond in conditions:
             sailfish[cond] = ambigCounts[cond]         
         masterDf.to_csv('masterdf.csv')
+    
     mast_dict = generate_dict(masterDf)
+
     print("Master DF Length", len(masterDf))
     print ("Done Reading")
     count = 0
@@ -381,7 +384,7 @@ def filterGraph(expDict, netfile, ofile):
         data  = pd.read_table(f, header=None)
 #        data = net[net[0]!=net[1]]
 #        data = data.reset_index()
-        start = time.time()
+#        start = time.time()
         for i in range(len(data)):
             count += 1
             print("\r{} done".format(count), end="")
@@ -391,7 +394,7 @@ def filterGraph(expDict, netfile, ofile):
             if x==y:
                 ofile.write("{}\t{}\t{}\n".format(x, y, data[2][i]))
                 continue 
-#            start = time.time()
+            start = time.time()
             value = mast_dict[(x,y)]
             # We are generating a datafram for the given pair from mast_dict
             # This df will have max 6 rows 3 for each condition        
@@ -409,16 +412,16 @@ def filterGraph(expDict, netfile, ofile):
                     mergeDf = pd.merge(mergeDf,currentDf[currentDf[2]==cond], on='key')
             if  mergeDf is not None and len(mergeDf)>0:
                 # We are calculating the absolute difference between the probabilites across 2 conditions
-                mergeDf['diff_prob'] = abs(mergeDf['6_x']-mergeDf['6_y'])
+                mergeDf['diff_prob'] = abs(mergeDf['7_x']-mergeDf['7_y'])
                 # We are considering the threshold to be the a percentage of the max of the probability across the 2 conditions
-                mergeDf['threshold'] = mergeDf[['6_x','6_y']].max(axis=1)*0.3
+                mergeDf['threshold'] = mergeDf[['7_x','7_y']].max(axis=1)*0.6
                 # We are counting the number of instances where our diff falss within the range of threshold
                 count1 = len(mergeDf[mergeDf['threshold']-mergeDf['diff_prob']>=0])
                 # If the number of instances with diff greater than threshold is greater than 50% than add the edge to filt.net
                 if count1/len(mergeDf)>=0.5: 
                     ofile.write("{}\t{}\t{}\n".format(x, y, data[2][i]))
-        end = time.time()
-        print("Total", end-start)
+                end = time.time()
+                print("Total", end-start)
     
 #    write_to_file(big_list, big_file)
     big_file.close()
